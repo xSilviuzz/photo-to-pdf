@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="it" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Converti le tue foto in PDF direttamente dal browser. Nessun server, nessuna pubblicità." />
+  <title>Photo to PDF</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@300..700&display=swap" rel="stylesheet">
+
+  <!-- Icone Lucide -->
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js" defer></script>
+
+  <!-- jsPDF -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
+
+  <!-- PDF.js (anteprima) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" defer></script>
+
+  <!-- Exif.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exif-js/2.3.0/exif.min.js" defer></script>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+  <!-- ════════════════════════════════════
+       HEADER
+  ════════════════════════════════════ -->
+  <header class="app-header">
+    <a class="app-logo" href="#" aria-label="Photo to PDF - torna all'inizio">
+      <!-- Logo SVG inline -->
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none"
+           aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="1" width="16" height="22" rx="2"
+              stroke="currentColor" stroke-width="1.8" fill="none"/>
+        <rect x="7" y="5" width="16" height="22" rx="2"
+              fill="var(--color-primary-highlight)"
+              stroke="currentColor" stroke-width="1.8"/>
+        <path d="M11 15 l3 -4 l3 4 l2 -2 l3 3"
+              stroke="currentColor" stroke-width="1.5"
+              stroke-linecap="round" stroke-linejoin="round"
+              fill="none"/>
+        <circle cx="13" cy="12" r="1.5" fill="currentColor"/>
+      </svg>
+      <span>Photo to PDF</span>
+    </a>
+
+    <div class="header-actions">
+      <!-- Indicatore schermata attiva -->
+      <div class="badge" id="screen-indicator" aria-live="polite">
+        Carica foto
+      </div>
+
+      <!-- Toggle dark/light mode -->
+      <button class="theme-toggle btn-ghost"
+              data-theme-toggle
+              aria-label="Passa alla modalità scura"
+              title="Cambia tema">
+        <!-- Icona aggiornata da JS -->
+        <i data-lucide="sun" aria-hidden="true"></i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ════════════════════════════════════
+       SCHERMATA 1 — UPLOAD
+  ════════════════════════════════════ -->
+  <main id="screen-upload" class="screen active" aria-label="Carica le foto">
+
+    <div class="upload-zone" id="upload-zone" role="button"
+         tabindex="0" aria-label="Clicca o trascina le foto qui">
+
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="1.5"
+           stroke-linecap="round" stroke-linejoin="round"
+           aria-hidden="true">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+
+      <h2>Trascina le foto qui</h2>
+      <p>oppure clicca per selezionarle dal dispositivo</p>
+      <p style="margin-top: var(--space-3); font-size: var(--text-xs);
+                color: var(--color-text-faint);">
+        JPG, PNG, WEBP, HEIC — multiple foto supportate
+      </p>
+
+      <input type="file" id="file-input"
+             accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+             multiple aria-hidden="true" />
+    </div>
+
+  </main>
+
+  <!-- ════════════════════════════════════
+       SCHERMATA 2 — EDITOR
+  ════════════════════════════════════ -->
+  <section id="screen-editor" class="screen" aria-label="Editor foto">
+
+    <!-- Toolbar globale -->
+    <div class="editor-toolbar" id="editor-toolbar" role="toolbar" aria-label="Azioni globali">
+
+      <!-- Aggiungi altre foto -->
+      <button class="btn btn-secondary btn-sm" id="btn-add-more"
+              title="Aggiungi altre foto">
+        <i data-lucide="plus" aria-hidden="true"></i>
+        Aggiungi foto
+      </button>
+      <input type="file" id="file-input-more"
+             accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
+             multiple aria-hidden="true" style="display:none"/>
+
+      <div class="divider" style="width:1px; height:24px; margin-block:0;"></div>
+
+      <!-- Ordina per data EXIF -->
+      <button class="btn btn-ghost btn-sm" id="btn-sort-exif"
+              title="Ordina per data di scatto">
+        <i data-lucide="calendar-arrow-up" aria-hidden="true"></i>
+        Ordina per data
+      </button>
+
+      <!-- Aggiungi pagina vuota -->
+      <button class="btn btn-ghost btn-sm" id="btn-add-blank"
+              title="Inserisci una pagina vuota alla fine">
+        <i data-lucide="file-plus" aria-hidden="true"></i>
+        Pagina vuota
+      </button>
+
+      <div class="divider" style="width:1px; height:24px; margin-block:0;"></div>
+
+      <!-- Layout pagina -->
+      <label for="select-layout"
+             style="font-size:var(--text-sm); color:var(--color-text-muted);
+                    white-space:nowrap;">
+        Layout:
+      </label>
+      <select class="input" id="select-layout"
+              style="width:auto; min-height:36px; padding-inline:var(--space-2);"
+              aria-label="Numero di foto per pagina">
+        <option value="1">1 foto / pagina</option>
+        <option value="2">2 foto / pagina</option>
+        <option value="4">4 foto / pagina</option>
+      </select>
+
+      <!-- Orientamento pagina -->
+      <label for="select-orientation"
+             style="font-size:var(--text-sm); color:var(--color-text-muted);
+                    white-space:nowrap;">
+        Pagina:
+      </label>
+      <select class="input" id="select-orientation"
+              style="width:auto; min-height:36px; padding-inline:var(--space-2);"
+              aria-label="Orientamento pagina PDF">
+        <option value="portrait">Verticale</option>
+        <option value="landscape">Orizzontale</option>
+      </select>
+
+    </div>
+
+    <!-- Corpo editor: griglia + sidebar -->
+    <div class="editor-body" id="editor-body">
+
+      <!-- Griglia foto -->
+      <main class="editor-main" id="editor-main" aria-label="Griglia foto">
+
+        <div class="photo-grid" id="photo-grid"
+             role="list" aria-label="Foto caricate">
+          <!-- Le card vengono generate da app.js -->
+        </div>
+
+        <!-- Empty state (visibile se non ci sono foto) -->
+        <div class="empty-state" id="empty-state" hidden>
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none"
+               stroke="currentColor" stroke-width="1.5"
+               stroke-linecap="round" stroke-linejoin="round"
+               aria-hidden="true">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+          <h3>Nessuna foto</h3>
+          <p>Aggiungi almeno una foto per poter generare il PDF.</p>
+          <button class="btn btn-primary" id="btn-empty-add">
+            <i data-lucide="plus" aria-hidden="true"></i>
+            Aggiungi foto
+          </button>
+        </div>
+
+      </main>
+
+      <!-- Sidebar editor -->
+      <aside class="editor-sidebar" id="editor-sidebar" aria-label="Modifica foto selezionata">
+
+        <!-- Nessuna foto selezionata -->
+        <div id="sidebar-placeholder">
+          <p style="font-size:var(--text-sm); color:var(--color-text-muted);
+                    text-align:center; padding-block:var(--space-8);">
+            Seleziona una foto<br>per modificarla
+          </p>
+        </div>
+
+        <!-- Pannello modifica (visibile quando foto selezionata) -->
+        <div id="sidebar-editor" hidden>
+
+          <!-- Undo / Redo -->
+          <div class="sidebar-section">
+            <h3>Cronologia</h3>
+            <div class="undo-redo">
+              <button class="btn btn-secondary" id="btn-undo"
+                      disabled aria-label="Annulla ultima modifica (Ctrl+Z)"
+                      title="Annulla (Ctrl+Z)">
+                <i data-lucide="undo-2" aria-hidden="true"></i>
+                Indietro
+              </button>
+              <button class="btn btn-secondary" id="btn-redo"
+                      disabled aria-label="Ripeti modifica (Ctrl+Y)"
+                      title="Ripeti (Ctrl+Y)">
+                Avanti
+                <i data-lucide="redo-2" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Rotazione -->
+          <div class="sidebar-section">
+            <h3>Rotazione</h3>
+            <div style="display:flex; gap:var(--space-2); flex-wrap:wrap;">
+              <button class="btn btn-secondary btn-icon"
+                      id="btn-rotate-ccw"
+                      aria-label="Ruota 90° a sinistra"
+                      title="Ruota sinistra 90°">
+                <i data-lucide="rotate-ccw" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-secondary btn-icon"
+                      id="btn-rotate-cw"
+                      aria-label="Ruota 90° a destra"
+                      title="Ruota destra 90°">
+                <i data-lucide="rotate-cw" aria-hidden="true"></i>
+              </button>
+              <button class="btn btn-secondary btn-icon"
+                      id="btn-rotate-180"
+                      aria-label="Ruota 180°"
+                      title="Ruota 180°">
+                <i data-lucide="refresh-cw" aria-hidden="true"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- Crop -->
+          <div class="sidebar-section">
+            <h3>Ritaglia</h3>
+            <button class="btn btn-secondary" id="btn-crop"
+                    style="width:100%"
+                    aria-label="Apri strumento di ritaglio">
+              <i data-lucide="crop" aria-hidden="true"></i>
+              Apri strumento ritaglia
+            </button>
+          </div>
+
+          <!-- Colori -->
+          <div class="sidebar-section">
+            <h3>Colori</h3>
+            <div class="slider-group">
+
+              <div class="slider-row">
+                <label for="slider-brightness">Luce</label>
+                <input type="range" id="slider-brightness"
+                       min="-100" max="100" value="0" step="1"
+                       aria-label="Luminosità" />
+                <output for="slider-brightness" id="out-brightness">0</output>
+              </div>
+
+              <div class="slider-row">
+                <label for="slider-contrast">Contr.</label>
+                <input type="range" id="slider-contrast"
+                       min="-100" max="100" value="0" step="1"
+                       aria-label="Contrasto" />
+                <output for="slider-contrast" id="out-contrast">0</output>
+              </div>
+
+              <div class="slider-row">
+                <label for="slider-saturation">Satur.</label>
+                <input type="range" id="slider-saturation"
+                       min="-100" max="100" value="0" step="1"
+                       aria-label="Saturazione" />
+                <output for="slider-saturation" id="out-saturation">0</output>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Preset colori -->
+          <div class="sidebar-section">
+            <h3>Preset</h3>
+            <div class="preset-group">
+              <button class="btn btn-secondary" data-preset="natural"
+                      aria-label="Preset: foto naturale">
+                🌿 Foto naturale
+              </button>
+              <button class="btn btn-secondary" data-preset="document"
+                      aria-label="Preset: documento (contrasto alto)">
+                📄 Documento
+              </button>
+              <button class="btn btn-secondary" data-preset="night"
+                      aria-label="Preset: schiarisci foto notturna">
+                🌙 Notte
+              </button>
+            </div>
+          </div>
+
+          <!-- Modalità Documento -->
+          <div class="sidebar-section">
+            <h3>Modalità documento</h3>
+            <label style="display:flex; align-items:center;
+                          gap:var(--space-3); cursor:pointer;
+                          font-size:var(--text-sm);">
+              <input type="checkbox" id="toggle-doc-mode"
+                     style="width:18px; height:18px; accent-color:var(--color-primary);"
+                     aria-label="Attiva modalità documento (bianco e nero, contrasto alto)" />
+              B&N + contrasto alto
+            </label>
+          </div>
+
+          <!-- Migliora automaticamente -->
+          <div class="sidebar-section">
+            <h3>Auto-migliora</h3>
+            <button class="btn btn-primary" id="btn-auto-enhance"
+                    style="width:100%"
+                    aria-label="Migliora automaticamente questa foto">
+              ✨ Migliora automaticamente
+            </button>
+          </div>
+
+          <!-- Filigrana -->
+          <div class="sidebar-section">
+            <h3>Testo pagina</h3>
+            <input type="text" class="input" id="input-watermark"
+                   placeholder="Es. Nome Cognome — 2025"
+                   aria-label="Testo da aggiungere in fondo alla pagina" />
+          </div>
+
+          <!-- Ripristina -->
+          <div class="sidebar-section">
+            <button class="btn btn-danger" id="btn-reset"
+                    style="width:100%"
+                    aria-label="Ripristina foto all'originale">
+              <i data-lucide="trash-2" aria-hidden="true"></i>
+              Ripristina originale
+            </button>
+          </div>
+
+        </div>
+        <!-- /sidebar-editor -->
+
+      </aside>
+      <!-- /sidebar -->
+
+    </div>
+    <!-- /editor-body -->
+
+    <!-- Footer azione -->
+    <footer class="action-footer" aria-label="Azioni PDF">
+      <input type="text" class="input" id="input-pdf-name"
+             placeholder="Nome file PDF"
+             value=""
+             style="max-width:220px; flex-shrink:0;"
+             aria-label="Nome del file PDF da scaricare" />
+
+      <div style="flex:1"></div>
+
+      <button class="btn btn-secondary" id="btn-back-upload"
+              aria-label="Torna alla schermata di caricamento">
+        <i data-lucide="arrow-left" aria-hidden="true"></i>
+        Indietro
+      </button>
+
+      <button class="btn btn-primary" id="btn-generate-pdf"
+              aria-label="Genera anteprima PDF">
+        <i data-lucide="file-text" aria-hidden="true"></i>
+        Genera anteprima PDF
+      </button>
+    </footer>
+
+  </section>
+  <!-- /screen-editor -->
+
+  <!-- ════════════════════════════════════
+       SCHERMATA 3 — ANTEPRIMA PDF
+  ════════════════════════════════════ -->
+  <section id="screen-preview" class="screen" aria-label="Anteprima PDF">
+
+    <!-- Navigazione slide -->
+    <div class="preview-container" id="preview-container">
+
+      <div class="preview-nav" role="navigation" aria-label="Navigazione pagine PDF">
+        <button class="btn btn-secondary btn-icon" id="btn-prev-page"
+                aria-label="Pagina precedente" disabled>
+          <i data-lucide="chevron-left" aria-hidden="true"></i>
+        </button>
+        <span id="page-counter" aria-live="polite">
+          Pagina 1 di 1
+        </span>
+        <button class="btn btn-secondary btn-icon" id="btn-next-page"
+                aria-label="Pagina successiva">
+          <i data-lucide="chevron-right" aria-hidden="true"></i>
+        </button>
+      </div>
+
+      <!-- Slide PDF corrente -->
+      <div class="preview-slide" id="preview-slide" aria-live="polite"
+           aria-label="Anteprima pagina corrente">
+        <canvas id="preview-canvas"></canvas>
+      </div>
+
+      <!-- Miniature -->
+      <div class="preview-thumbnails" id="preview-thumbnails"
+           role="list" aria-label="Miniature di tutte le pagine">
+        <!-- Generate da pdf-export.js -->
+      </div>
+
+    </div>
+
+    <!-- Footer anteprima -->
+    <footer class="action-footer" aria-label="Azioni download">
+
+      <button class="btn btn-secondary" id="btn-back-editor"
+              aria-label="Torna all'editor">
+        <i data-lucide="arrow-left" aria-hidden="true"></i>
+        Modifica
+      </button>
+
+      <div style="flex:1"></div>
+
+      <!-- Condividi (Web Share API — visibile solo su mobile/se supportata) -->
+      <button class="btn btn-secondary" id="btn-share"
+              aria-label="Condividi PDF via WhatsApp, email o altro"
+              hidden>
+        <i data-lucide="share-2" aria-hidden="true"></i>
+        Condividi
+      </button>
+
+      <!-- Download -->
+      <button class="btn btn-primary" id="btn-download"
+              aria-label="Scarica il PDF">
+        <i data-lucide="download" aria-hidden="true"></i>
+        Scarica PDF
+      </button>
+
+    </footer>
+
+  </section>
+  <!-- /screen-preview -->
+
+  <!-- ════════════════════════════════════
+       MODALE CROP
+  ════════════════════════════════════ -->
+  <div class="modal-backdrop" id="modal-crop"
+     role="dialog" aria-modal="true" aria-labelledby="crop-title">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 id="crop-title" style="font-size:var(--text-lg);">Ritaglia foto</h2>
+        <button class="btn btn-ghost btn-icon" id="btn-close-crop"
+                aria-label="Chiudi strumento ritaglio">
+          <i data-lucide="x" aria-hidden="true"></i>
+        </button>
+      </div>
+      <div class="modal-body" style="display:flex; justify-content:center;
+                                     align-items:center; overflow:hidden;">
+        <canvas id="crop-canvas"
+                style="max-width:100%; max-height:60dvh;
+                       cursor:crosshair; border-radius:var(--radius-md);">
+        </canvas>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btn-crop-cancel">
+          Annulla
+        </button>
+        <button class="btn btn-primary" id="btn-crop-confirm">
+          <i data-lucide="check" aria-hidden="true"></i>
+          Applica ritaglio
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════
+       CONTAINER TOAST
+  ════════════════════════════════════ -->
+  <div class="toast-container" id="toast-container"
+       aria-live="assertive" aria-atomic="true">
+  </div>
+
+  <!-- ════════════════════════════════════
+       SCRIPT
+  ════════════════════════════════════ -->
+
+  <!-- Dark mode toggle (eseguito subito, prima del resto) -->
+  <script>
+    (function () {
+      const toggle = document.querySelector('[data-theme-toggle]');
+      const html   = document.documentElement;
+      let theme    = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+
+      html.setAttribute('data-theme', theme);
+
+      function updateIcon() {
+        if (!toggle) return;
+        toggle.setAttribute('aria-label',
+          'Passa alla modalità ' + (theme === 'dark' ? 'chiara' : 'scura'));
+        toggle.innerHTML = theme === 'dark'
+          ? '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>'
+          : '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>';
+      }
+
+      updateIcon();
+
+      if (toggle) {
+        toggle.addEventListener('click', () => {
+          theme = theme === 'dark' ? 'light' : 'dark';
+          html.setAttribute('data-theme', theme);
+          updateIcon();
+        });
+      }
+    })();
+  </script>
+
+  <!-- Moduli JS dell'app (in ordine di dipendenza) -->
+  <script src="js/session.js"     defer></script>
+  <script src="js/exif.js"        defer></script>
+  <script src="js/editor.js"      defer></script>
+  <script src="js/pdf-export.js"  defer></script>
+  <script src="js/app.js"         defer></script>
+
+</body>
+</html>
