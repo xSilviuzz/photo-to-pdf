@@ -366,48 +366,39 @@ function removePhoto(id) {
 let dragSrcId = null;
 
 function initCardDragDrop() {
-  const cards = document.querySelectorAll('.photo-card');
+  const grid = document.getElementById('photo-grid');
 
-  cards.forEach(card => {
-    card.addEventListener('dragstart', e => {
-      dragSrcId = card.dataset.id;
-      card.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-    });
+  // Distruggi istanza precedente se esiste
+  if (App._sortable) {
+    App._sortable.destroy();
+    App._sortable = null;
+  }
 
-    card.addEventListener('dragend', () => {
-      card.classList.remove('dragging');
-      document.querySelectorAll('.photo-card')
-              .forEach(c => c.classList.remove('drag-over-target'));
-      dragSrcId = null;
-    });
+  // SortableJS gestisce sia mouse che touch
+  App._sortable = Sortable.create(grid, {
+    animation:     150,
+    ghostClass:    'dragging',
+    chosenClass:   'selected',
+    delay:         100,       // ms di pressione prima di attivare il drag
+    delayOnTouchOnly: true,   // delay solo su touch, su desktop immediato
+    touchStartThreshold: 5,   // pixel di movimento prima di iniziare il drag
 
-    card.addEventListener('dragover', e => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      document.querySelectorAll('.photo-card')
-              .forEach(c => c.classList.remove('drag-over-target'));
-      card.classList.add('drag-over-target');
-    });
-
-    card.addEventListener('drop', e => {
-      e.preventDefault();
-      if (!dragSrcId || dragSrcId === card.dataset.id) return;
-
-      const srcIdx  = App.photos.findIndex(p => p.id === dragSrcId);
-      const destIdx = App.photos.findIndex(p => p.id === card.dataset.id);
-      if (srcIdx === -1 || destIdx === -1) return;
-
-      // Scambia posizioni
-      const [moved] = App.photos.splice(srcIdx, 1);
-      App.photos.splice(destIdx, 0, moved);
-
+    onEnd(evt) {
+      // Riordina App.photos in base al nuovo ordine DOM
+      const newOrder = [];
+      document.querySelectorAll('.photo-card').forEach(card => {
+        const photo = App.photos.find(p => p.id === card.dataset.id);
+        if (photo) newOrder.push(photo);
+      });
+      App.photos = newOrder;
       saveSession();
-      renderGrid();
 
-      // Riseleziona la foto spostata
-      if (App.selectedId) selectPhoto(App.selectedId);
-    });
+      // Aggiorna i badge numerici senza re-renderizzare tutto
+      document.querySelectorAll('.photo-card').forEach((card, i) => {
+        const badge = card.querySelector('.badge-order');
+        if (badge) badge.textContent = i + 1;
+      });
+    }
   });
 }
 

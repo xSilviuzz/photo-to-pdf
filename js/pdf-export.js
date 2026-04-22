@@ -319,23 +319,28 @@ async function renderPDFPreview(blob, totalPages) {
 async function renderPreviewPage(pageIdx) {
   if (!App._pdfDoc) return;
 
-  const pdfDoc  = App._pdfDoc;
-  const page    = await pdfDoc.getPage(pageIdx + 1);
+  const pdfDoc    = App._pdfDoc;
+  const page      = await pdfDoc.getPage(pageIdx + 1);
+  const mainCanvas = document.getElementById('preview-canvas');
+  const container  = document.getElementById('preview-slide');
 
-  const mainCanvas  = document.getElementById('preview-canvas');
-  const container   = document.getElementById('preview-slide');
+  const containerW = container.clientWidth || 640;
+  const viewport0  = page.getViewport({ scale: 1 });
 
-  const containerW  = container.clientWidth || 600;
-  const viewport0   = page.getViewport({ scale: 1 });
+  // Usa devicePixelRatio per alta risoluzione su schermi retina/mobile
+  const dpr        = window.devicePixelRatio || 1;
+  const scale      = (containerW / viewport0.width) * dpr;
+  const viewport   = page.getViewport({ scale });
 
-  // Calcola scala in base alla larghezza disponibile
-  const scale    = containerW / viewport0.width;
-  const viewport = page.getViewport({ scale });
-
+  // Il canvas interno è più grande (alta risoluzione)
   mainCanvas.width  = viewport.width;
   mainCanvas.height = viewport.height;
 
-  // Aggiorna aspect-ratio del contenitore dinamicamente
+  // Ma visivamente occupa lo spazio del contenitore
+  mainCanvas.style.width  = containerW + 'px';
+  mainCanvas.style.height = Math.round(viewport0.height * (containerW / viewport0.width)) + 'px';
+
+  // Aggiorna aspect-ratio del contenitore
   container.style.aspectRatio = `${viewport0.width} / ${viewport0.height}`;
 
   const ctx = mainCanvas.getContext('2d');
@@ -359,28 +364,27 @@ async function renderAllThumbnails(pdfDoc) {
   container.innerHTML = '';
 
   for (let i = 0; i < pdfDoc.numPages; i++) {
-    const page     = await pdfDoc.getPage(i + 1);
-    const viewport = page.getViewport({ scale: 0.2 });
+    const page = await pdfDoc.getPage(i + 1);
+    const dpr  = window.devicePixelRatio || 1;
+    const viewport = page.getViewport({ scale: 0.2 * dpr });
 
-    const thumbDiv    = document.createElement('div');
+    const thumbDiv = document.createElement('div');
     thumbDiv.className = 'preview-thumb' + (i === 0 ? ' active' : '');
     thumbDiv.setAttribute('role', 'listitem');
     thumbDiv.setAttribute('aria-label', `Pagina ${i + 1}`);
     thumbDiv.setAttribute('tabindex', '0');
     thumbDiv.title = `Pagina ${i + 1}`;
 
-    const thumbCanvas        = document.createElement('canvas');
-    thumbCanvas.width        = viewport.width;
-    thumbCanvas.height       = viewport.height;
-    thumbCanvas.style.width  = '100%';
-    thumbCanvas.style.height = '100%';
+    const thumbCanvas         = document.createElement('canvas');
+    thumbCanvas.width         = viewport.width;
+    thumbCanvas.height        = viewport.height;
+    thumbCanvas.style.width   = '100%';
+    thumbCanvas.style.height  = '100%';
 
     const ctx = thumbCanvas.getContext('2d');
     await page.render({ canvasContext: ctx, viewport }).promise;
 
     thumbDiv.appendChild(thumbCanvas);
-
-    // Click su miniatura → naviga alla pagina
     thumbDiv.addEventListener('click', () => renderPreviewPage(i));
     thumbDiv.addEventListener('keydown', e => {
       if (e.key === 'Enter' || e.key === ' ') {
