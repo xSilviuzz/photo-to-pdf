@@ -305,7 +305,17 @@ async function renderPDFPreview(blob, totalPages) {
   // Genera miniature per tutte le pagine
   await renderAllThumbnails(pdfDoc);
 
-  // Renderizza la prima pagina
+  // Aspetta che la schermata anteprima sia visibile prima di misurare il container
+  await new Promise(resolve => {
+    const screen = document.getElementById('screen-preview');
+    if (screen && !screen.hidden && screen.style.display !== 'none') {
+      resolve();
+    } else {
+    // Aspetta 2 frame dopo che la schermata diventa visibile
+    requestAnimationFrame(() => requestAnimationFrame(resolve));
+    }
+  });
+
   await renderPreviewPage(0);
 
   // Aggiorna navigazione
@@ -319,33 +329,39 @@ async function renderPDFPreview(blob, totalPages) {
 async function renderPreviewPage(pageIdx) {
   if (!App._pdfDoc) return;
 
-  const pdfDoc    = App._pdfDoc;
-  const page      = await pdfDoc.getPage(pageIdx + 1);
+  const pdfDoc     = App._pdfDoc;
+  const page       = await pdfDoc.getPage(pageIdx + 1);
   const mainCanvas = document.getElementById('preview-canvas');
   const container  = document.getElementById('preview-slide');
 
-  const containerW = container.clientWidth || 640;
+  const containerW = container.clientWidth || window.innerWidth - 32;
   const viewport0  = page.getViewport({ scale: 1 });
 
-  // Usa devicePixelRatio per alta risoluzione su schermi retina/mobile
-  const dpr        = window.devicePixelRatio || 1;
-  const scale      = (containerW / viewport0.width) * dpr;
-  const viewport   = page.getViewport({ scale });
+  const dpr    = window.devicePixelRatio || 1;
+  const scale  = containerW / viewport0.width;
+  const viewport = page.getViewport({ scale });
 
-  // Il canvas interno è più grande (alta risoluzione)
-  mainCanvas.width  = viewport.width;
-  mainCanvas.height = viewport.height;
+  // Canvas fisico = dimensioni * dpr (alta risoluzione)
+  mainCanvas.width  = Math.floor(viewport.width  * dpr);
+  mainCanvas.height = Math.floor(viewport.height * dpr);
 
-  // Ma visivamente occupa lo spazio del contenitore
-  mainCanvas.style.width  = containerW + 'px';
-  mainCanvas.style.height = Math.round(viewport0.height * (containerW / viewport0.width)) + 'px';
+  // CSS = dimensioni logiche (normali)
+  mainCanvas.style.width  = Math.floor(viewport.width)  + 'px';
+  mainCanvas.style.height = Math.floor(viewport.height) + 'px';
 
-  // Aggiorna aspect-ratio del contenitore
   container.style.aspectRatio = `${viewport0.width} / ${viewport0.height}`;
 
   const ctx = mainCanvas.getContext('2d');
   ctx.clearRect(0, 0, mainCanvas.width, mainCanvas.height);
-  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  // transform scala il contesto per il dpr — metodo ufficiale PDF.js
+  const transform = dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null;
+
+  await page.render({
+    canvasContext: ctx,
+    viewport,
+    transform,
+  }).promise;
 
   App.currentPreviewPage = pageIdx;
   updatePreviewNav();

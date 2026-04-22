@@ -951,6 +951,12 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
+/* Necessario per SortableJS su mobile */
+.photo-card {
+  touch-action: none;
+}
+
 /* Modale crop — visibilità controllata via classe JS */
 #modal-crop          { display: none; }
 #modal-crop.is-open  { display: flex; }
+

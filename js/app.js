@@ -501,8 +501,12 @@ function initFooter() {
     if (window.lucide) lucide.createIcons();
 
     try {
-      await generatePDFPreview();
+      // 1. Mostra la schermata PRIMA di generare
       showScreen('screen-preview');
+      // 2. Aspetta che il DOM sia aggiornato e il container abbia dimensioni reali
+      await new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+      // 3. Genera il PDF e renderizza l'anteprima
+      await generatePDFPreview();
     } catch (err) {
       console.error(err);
       showToast('Errore nella generazione del PDF', 'error');
