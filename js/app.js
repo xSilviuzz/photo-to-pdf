@@ -363,43 +363,233 @@ function removePhoto(id) {
    DRAG & DROP — RIORDINO CARD
 ══════════════════════════════════════════ */
 
-let dragSrcId = null;
+/* ══════════════════════════════════════════
+   DRAG & DROP — RIORDINO CARD
+   PC:     HTML5 drag API nativa
+   Mobile: touch events nativi — ghost visivo,
+           swap eseguito UNA SOLA VOLTA su touchend
+══════════════════════════════════════════ */
+
+let _dragReordering = false;
 
 function initCardDragDrop() {
   const grid = document.getElementById('photo-grid');
+  if (!grid) return;
 
-  // Distruggi istanza precedente se esiste
-  if (App._sortable) {
-    App._sortable.destroy();
-    App._sortable = null;
+  // Rimuove listener del ciclo precedente prima di registrarne di nuovi
+  if (App._dragAbort) App._dragAbort.abort();
+  App._dragAbort = new AbortController();
+  const sig = App._dragAbort.signal;
+
+  let _dragSrcId = null;
+  let _targetId  = null;
+  let _ghost     = null;
+  let _offX      = 0;
+  let _offY      = 0;
+
+  function cardOf(el) {
+    return el?.closest?.('.photo-card') ?? null;
   }
 
-  // SortableJS gestisce sia mouse che touch
-  App._sortable = Sortable.create(grid, {
-    animation:     150,
-    ghostClass:    'dragging',
-    chosenClass:   'selected',
-    delay:         100,       // ms di pressione prima di attivare il drag
-    delayOnTouchOnly: true,   // delay solo su touch, su desktop immediato
-    touchStartThreshold: 5,   // pixel di movimento prima di iniziare il drag
+  function createGhost(card, clientX, clientY) {
+    const rect  = card.getBoundingClientRect();
+    const clone = card.cloneNode(true);
+    clone.id = '_drag_ghost';
+    clone.removeAttribute('data-id');
+    clone.style.cssText = [
+      'position:fixed',
+      'z-index:9999',
+      `width:${rect.width}px`,
+      `height:${rect.height}px`,
+      `left:${clientX - _offX}px`,
+      `top:${clientY - _offY}px`,
+      'opacity:0.72',
+      'pointer-events:none',
+      'border-radius:var(--radius-lg)',
+      'box-shadow:0 8px 28px oklch(0.1 0 0 / 0.35)',
+      'transform:scale(1.04)',
+      'will-change:left,top',
+    ].join(';');
+    document.body.appendChild(clone);
+    // Disabilita pointer-events su tutti gli elementi figli delle card
+    // così elementFromPoint durante touchmove vede sempre la .photo-card
+    grid.querySelectorAll('.photo-card *').forEach(el => {
+      el.style.pointerEvents = 'none';
+    });
+    if (window.lucide) lucide.createIcons({ node: clone });
+    return clone;
+  }
 
-    onEnd(evt) {
-      // Riordina App.photos in base al nuovo ordine DOM
-      const newOrder = [];
-      document.querySelectorAll('.photo-card').forEach(card => {
-        const photo = App.photos.find(p => p.id === card.dataset.id);
-        if (photo) newOrder.push(photo);
-      });
-      App.photos = newOrder;
-      saveSession();
+  function moveGhost(clientX, clientY) {
+    if (!_ghost) return;
+    _ghost.style.left = `${clientX - _offX}px`;
+    _ghost.style.top  = `${clientY - _offY}px`;
+  }
 
-      // Aggiorna i badge numerici senza re-renderizzare tutto
-      document.querySelectorAll('.photo-card').forEach((card, i) => {
-        const badge = card.querySelector('.badge-order');
-        if (badge) badge.textContent = i + 1;
-      });
+  function setTarget(id) {
+    grid.querySelectorAll('.photo-card.drag-over')
+        .forEach(c => c.classList.remove('drag-over'));
+    _targetId = id;
+    if (!id || id === _dragSrcId) return;
+    grid.querySelector(`.photo-card[data-id="${id}"]`)
+        ?.classList.add('drag-over');
+  }
+
+  function doReorder(srcId, tgtId) {
+    if (!srcId || !tgtId || srcId === tgtId) return;
+
+    const si = App.photos.findIndex(p => p.id === srcId);
+    const ti = App.photos.findIndex(p => p.id === tgtId);
+    if (si === -1 || ti === -1) return;
+
+    // SWAP: scambia le due posizioni nell'array
+    [App.photos[si], App.photos[ti]] = [App.photos[ti], App.photos[si]];
+
+    saveSession();
+
+    // Aggiorna il DOM riflettendo lo swap
+    const srcCard = grid.querySelector(`.photo-card[data-id="${srcId}"]`);
+    const tgtCard = grid.querySelector(`.photo-card[data-id="${tgtId}"]`);
+    if (!srcCard || !tgtCard) return;
+
+    // Inserisci un placeholder per non perdere la posizione
+    const placeholder = document.createElement('div');
+    tgtCard.before(placeholder);
+    srcCard.before(tgtCard);
+    placeholder.replaceWith(srcCard);
+
+    // Aggiorna badge
+    grid.querySelectorAll('.photo-card').forEach((c, i) => {
+      const b = c.querySelector('.badge-order');
+      if (b) b.textContent = i + 1;
+    });
+  }
+
+  function cleanup() {
+    _ghost?.remove();
+    _ghost = null;
+    grid.querySelectorAll('.photo-card.drag-over').forEach(c => c.classList.remove('drag-over'));
+    grid.querySelectorAll('.photo-card.dragging').forEach(c => c.classList.remove('dragging'));
+    document.body.style.overflow    = '';
+    document.body.style.touchAction = '';
+    // Ripristina pointer-events
+    grid.querySelectorAll('.photo-card *').forEach(el => {
+      el.style.pointerEvents = '';
+    });
+    _dragSrcId = null;
+    _targetId  = null;
+  }
+
+  // ── PC: HTML5 drag API ───────────────────────────────────
+  grid.addEventListener('dragstart', e => {
+    const card = cardOf(e.target);
+    if (!card) return;
+    _dragSrcId = card.dataset.id;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', _dragSrcId);
+  }, { signal: sig });
+
+  grid.addEventListener('dragover', e => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    const id = cardOf(e.target)?.dataset?.id ?? null;
+    if (id && id !== _targetId) setTarget(id);
+  }, { signal: sig });
+
+  grid.addEventListener('dragleave', e => {
+    if (!grid.contains(e.relatedTarget)) setTarget(null);
+  }, { signal: sig });
+
+  grid.addEventListener('drop', e => {
+    e.preventDefault();
+    const card = cardOf(e.target);
+    if (card) doReorder(_dragSrcId, card.dataset.id);
+    cleanup();
+  }, { signal: sig });
+
+  grid.addEventListener('dragend', cleanup, { signal: sig });
+
+  // ── Mobile: touch events nativi ─────────────────────────
+grid.addEventListener('touchstart', e => {
+  const card = cardOf(e.target);
+  
+  if (!card) { console.log('[touchstart] USCITA: no card'); return; }
+  if (e.target.closest('button, input, select, textarea')) { console.log('[touchstart] USCITA: bottone'); return; }
+
+  // Ignora touchstart troppo ravvicinato a un reorder appena eseguito
+ 
+  if (_dragReordering) return;
+ 
+
+  const touch = e.touches[0];
+  const rect  = card.getBoundingClientRect();
+  _dragSrcId  = card.dataset.id;
+  _offX       = touch.clientX - rect.left;
+  _offY       = touch.clientY - rect.top;
+ 
+
+  card.classList.add('dragging');
+  _ghost = createGhost(card, touch.clientX, touch.clientY);
+
+  document.body.style.overflow    = 'hidden';
+  document.body.style.touchAction = 'none';
+}, { passive: true, signal: sig });
+
+  grid.addEventListener('touchmove', e => {
+    if (!_dragSrcId || !_ghost) return;
+    e.preventDefault();
+
+    const touch = e.touches[0];
+    moveGhost(touch.clientX, touch.clientY);
+
+    // Trova la card più vicina usando getBoundingClientRect()
+    // che già restituisce coordinate relative al viewport — corretto anche con scroll interno
+    let closestId   = null;
+    let closestDist = Infinity;
+
+    grid.querySelectorAll('.photo-card').forEach(c => {
+      if (c.dataset.id === _dragSrcId) return;
+      const r  = c.getBoundingClientRect();
+      // Salta card con rect a zero (non ancora visibili o fuori layout)
+      if (r.width === 0 || r.height === 0) return;
+      const cx   = r.left + r.width  / 2;
+      const cy   = r.top  + r.height / 2;
+      const dist = Math.hypot(touch.clientX - cx, touch.clientY - cy);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closestId   = c.dataset.id;
+      }
+    });
+
+    // Verifica che il dito sia dentro i bounds della card (tolleranza 30px)
+    const targetCard = closestId
+      ? grid.querySelector(`.photo-card[data-id="${closestId}"]`)
+      : null;
+    const tr = targetCard?.getBoundingClientRect();
+    const inBounds = tr
+      ? touch.clientX >= tr.left - 30 && touch.clientX <= tr.right  + 30
+      && touch.clientY >= tr.top  - 30 && touch.clientY <= tr.bottom + 30
+      : false;
+
+    const id = inBounds ? closestId : null;
+   
+    if (id !== _targetId) setTarget(id);
+  }, { passive: false, signal: sig});
+
+  grid.addEventListener('touchend', () => {
+
+    
+
+    if (_dragSrcId && _targetId && _targetId !== _dragSrcId) {
+      _dragReordering = true;
+      doReorder(_dragSrcId, _targetId);
+      setTimeout(() => { _dragReordering = false; }, 300);
     }
-  });
+    cleanup();
+  }, { passive: true, signal: sig });
+
+  grid.addEventListener('touchcancel', cleanup, { passive: true, signal: sig });
 }
 
 /* ══════════════════════════════════════════

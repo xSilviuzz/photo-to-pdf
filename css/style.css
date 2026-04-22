@@ -408,6 +408,12 @@ input, textarea, select {
   cursor: grabbing;
 }
 
+.photo-card.drag-over {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  transform: scale(1.02);
+}
+
 .photo-card img {
   width: 100%;
   height: auto;
@@ -951,9 +957,16 @@ input[type="range"]::-moz-range-thumb {
   }
 }
 
-/* Necessario per SortableJS su mobile */
-.photo-card {
-  touch-action: none;
+
+/* Elemento scelto durante il drag */
+.sortable-chosen {
+  opacity: 0.8;
+  transform: scale(1.02);
+}
+
+/* Elemento fantasma durante il drag */
+.dragging {
+  opacity: 0.4;
 }
 
 /* Modale crop — visibilità controllata via classe JS */

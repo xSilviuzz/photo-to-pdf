@@ -308,11 +308,10 @@ async function renderPDFPreview(blob, totalPages) {
   // Aspetta che la schermata anteprima sia visibile prima di misurare il container
   await new Promise(resolve => {
     const screen = document.getElementById('screen-preview');
-    if (screen && !screen.hidden && screen.style.display !== 'none') {
+    if (screen && screen.classList.contains('active')) {
       resolve();
     } else {
-    // Aspetta 2 frame dopo che la schermata diventa visibile
-    requestAnimationFrame(() => requestAnimationFrame(resolve));
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
     }
   });
 

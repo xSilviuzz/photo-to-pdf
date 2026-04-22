@@ -340,18 +340,23 @@ async function autoEnhance(photo) {
   const range      = p95 - p5;
   const satAdj     = range < 100 ? 15 : 0;
 
-  // Applica
-  photo.adjustments.brightness = brightAdj;
-  photo.adjustments.contrast   = contrastAdj;
-  photo.adjustments.saturation = satAdj;
+  try {
+    photo.adjustments.brightness = brightAdj;
+    photo.adjustments.contrast   = contrastAdj;
+    photo.adjustments.saturation = satAdj;
 
-  // Aggiorna slider nella sidebar
-  setSlider('brightness', brightAdj);
-  setSlider('contrast',   contrastAdj);
-  setSlider('saturation', satAdj);
+    await applyAdjustments(photo);
 
-  await applyAdjustments(photo);
-  showToast('Foto migliorata automaticamente ✨', 'success');
+    // Slider aggiornati solo dopo rendering riuscito
+    setSlider('brightness', brightAdj);
+    setSlider('contrast',   contrastAdj);
+    setSlider('saturation', satAdj);
+
+    showToast('Foto migliorata automaticamente ✨', 'success');
+  } catch (err) {
+    console.error('autoEnhance: errore rendering', err);
+    showToast('Errore durante l\'auto-enhance', 'error');
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -391,7 +396,7 @@ async function openCropModal(photo) {
     CropState.canvas = canvas;
     CropState.ctx    = canvas.getContext('2d');
 
-    const img = await loadImage(photo.currentSrc);
+    const img = await loadImage(photo.originalSrc);
     CropState.img = img;
 
     // Calcola dimensioni canvas basandosi sul modal ora visibile
